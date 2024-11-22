@@ -21,10 +21,13 @@
         const messagesDiv = document.getElementById('messages');
         const requestInfoDiv = document.getElementById('requestInfo');
         
-        function makeRequest(url) {
+        function makeRequest(url, accessToken) {
             const xhr = new XMLHttpRequest();
             
             xhr.open('GET', `https://${url}/services/data/v61.0/limits`, true);
+            
+            // Add the authorization header with the access token
+            xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`);
             
             xhr.onreadystatechange = function() {
                 requestInfoDiv.innerHTML += `
@@ -58,16 +61,29 @@
                 messagesDiv.innerHTML = '<pre>Init Request: ' + JSON.stringify(event.data, null, 2) + '</pre>';
                 
                 const storage = event.data.iFrameLocalStorage;
-                const hostKey = Object.keys(storage).find(key => key.endsWith('_orgInstance'));
                 
-                if (hostKey) {
-                    const hostUrl = hostKey.replace('_orgInstance', '');
+                // Look for both the instance URL and access token
+                const hostKey = Object.keys(storage).find(key => key.endsWith('_orgInstance'));
+                const tokenKey = Object.keys(storage).find(key => key.endsWith('_accessToken'));
+                
+                if (hostKey && tokenKey) {
+                    const hostUrl = storage[hostKey];
+                    const accessToken = storage[tokenKey];
+                    
                     requestInfoDiv.innerHTML = `
-                        <h3>Attempting request to:</h3>
+                        <h3>Attempting authenticated request to:</h3>
                         <pre>https://${hostUrl}/services/data/v61.0/limits</pre>
+                        <pre>Using token: ${accessToken.substring(0, 10)}...</pre>
                     `;
                     
-                    makeRequest(hostUrl);
+                    makeRequest(hostUrl, accessToken);
+                } else {
+                    requestInfoDiv.innerHTML = `
+                        <h3>Error: Missing required authentication information</h3>
+                        <pre>Host Key Found: ${Boolean(hostKey)}</pre>
+                        <pre>Token Key Found: ${Boolean(tokenKey)}</pre>
+                        <pre>Available Storage Keys: ${JSON.stringify(Object.keys(storage), null, 2)}</pre>
+                    `;
                 }
             }
         });
