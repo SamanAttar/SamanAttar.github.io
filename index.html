@@ -23,10 +23,7 @@
         
         function makeRequest(url, accessToken) {
             const xhr = new XMLHttpRequest();
-            
             xhr.open('GET', `https://${url}/services/data/v61.0/limits`, true);
-            
-            // Add the authorization header with the access token
             xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`);
             
             xhr.onreadystatechange = function() {
@@ -62,28 +59,59 @@
                 
                 const storage = event.data.iFrameLocalStorage;
                 
-                // Look for both the instance URL and access token
+                // Debug output to see all available keys
+                requestInfoDiv.innerHTML = `
+                    <h3>Available Storage Keys:</h3>
+                    <pre>${JSON.stringify(Object.keys(storage), null, 2)}</pre>
+                `;
+
+                // Look for instance URL
                 const hostKey = Object.keys(storage).find(key => key.endsWith('_orgInstance'));
-                const tokenKey = Object.keys(storage).find(key => key.endsWith('_accessToken'));
                 
-                if (hostKey && tokenKey) {
+                // Look for access token with multiple possible patterns
+                const tokenPatterns = [
+                    '_accessToken',
+                    '_sid',
+                    '_sessionId',
+                    'access_token',
+                    'sid'
+                ];
+                
+                let accessToken = null;
+                let tokenKey = null;
+                
+                // Try each pattern
+                for (const pattern of tokenPatterns) {
+                    tokenKey = Object.keys(storage).find(key => key.endsWith(pattern));
+                    if (tokenKey) {
+                        accessToken = storage[tokenKey];
+                        break;
+                    }
+                }
+
+                // Look for token in the entire event data structure
+                if (!accessToken && event.data.sessionId) {
+                    accessToken = event.data.sessionId;
+                }
+
+                requestInfoDiv.innerHTML += `
+                    <h3>Authentication Information Found:</h3>
+                    <pre>Host Key: ${hostKey || 'Not found'}</pre>
+                    <pre>Token Key: ${tokenKey || 'Not found'}</pre>
+                    <pre>Token Found: ${Boolean(accessToken)}</pre>
+                    <pre>Token Pattern Used: ${tokenKey ? tokenKey.split('_').pop() : 'None'}</pre>
+                `;
+
+                if (hostKey && accessToken) {
                     const hostUrl = storage[hostKey];
-                    const accessToken = storage[tokenKey];
                     
-                    requestInfoDiv.innerHTML = `
+                    requestInfoDiv.innerHTML += `
                         <h3>Attempting authenticated request to:</h3>
                         <pre>https://${hostUrl}/services/data/v61.0/limits</pre>
                         <pre>Using token: ${accessToken.substring(0, 10)}...</pre>
                     `;
                     
                     makeRequest(hostUrl, accessToken);
-                } else {
-                    requestInfoDiv.innerHTML = `
-                        <h3>Error: Missing required authentication information</h3>
-                        <pre>Host Key Found: ${Boolean(hostKey)}</pre>
-                        <pre>Token Key Found: ${Boolean(tokenKey)}</pre>
-                        <pre>Available Storage Keys: ${JSON.stringify(Object.keys(storage), null, 2)}</pre>
-                    `;
                 }
             }
         });
