@@ -24,13 +24,14 @@
         function makeRequest(url) {
             const xhr = new XMLHttpRequest();
             
-            xhr.open('POST', url, true);
+            xhr.open('GET', `https://${url}/services/data/v61.0/limits`, true);
             
             xhr.onreadystatechange = function() {
                 requestInfoDiv.innerHTML += `
                     <h3>Request State ${xhr.readyState}:</h3>
                     <pre>Status: ${xhr.status}</pre>
-                    <pre>Headers: ${xhr.getAllResponseHeaders()}</pre>
+                    <pre>Headers Sent: ${xhr.getAllRequestHeaders?.() || 'N/A'}</pre>
+                    <pre>Headers Received: ${xhr.getAllResponseHeaders()}</pre>
                     <pre>Response: ${xhr.responseText}</pre>
                 `;
             };
@@ -61,14 +62,12 @@
                 
                 if (hostKey) {
                     const hostUrl = hostKey.replace('_orgInstance', '');
-                    const fullUrl = `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/rest-explore.html?host=${hostUrl}&method=POST&endpoint=samanattar.github.io`;
-                    
                     requestInfoDiv.innerHTML = `
                         <h3>Attempting request to:</h3>
-                        <pre>${fullUrl}</pre>
+                        <pre>https://${hostUrl}/services/data/v61.0/limits</pre>
                     `;
                     
-                    makeRequest(fullUrl);
+                    makeRequest(hostUrl);
                 }
             }
         });
