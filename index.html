@@ -10,15 +10,27 @@
 <body>
     <div id="messages">Loading...</div>
     <script>
+        const messagesDiv = document.getElementById('messages');
+        
         window.addEventListener('message', function(event) {
-            document.getElementById('messages').textContent = 'Got message: ' + JSON.stringify(event.data, null, 2);
+            // Log all messages for debugging
+            console.log('Message received:', event.data);
+            
+            // Only process messages from our extension
+            if (event.data.insextInitRequest) {
+                messagesDiv.innerHTML += '<pre>Init Request: ' + JSON.stringify(event.data, null, 2) + '</pre>';
+            } else if (event.data.iFrameLocalStorage) {
+                messagesDiv.innerHTML += '<pre>Storage Data: ' + JSON.stringify(event.data.iFrameLocalStorage, null, 2) + '</pre>';
+            }
         });
 
-        // Initial iframe for getting localStorage data
-        const initFrame = document.createElement('iframe');
-        initFrame.src = `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html`;
-        initFrame.style.display = 'none';
-        document.body.appendChild(initFrame);
+        // Create the iframe with a small delay to ensure our event listener is ready
+        setTimeout(() => {
+            const initFrame = document.createElement('iframe');
+            initFrame.src = 'chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html';
+            initFrame.style.display = 'none';
+            document.body.appendChild(initFrame);
+        }, 100);
     </script>
 </body>
 </html>
